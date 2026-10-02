@@ -164,45 +164,50 @@ predicate Constraint(
 }
 
 
+datatype RuntimeDataState = RuntimeDataState(
+  J: seq<JobInfo>,
+  Cold: map<Resource,int>,
+  C: map<Resource,int>,
+  init: seq<Job>,
+  deadline: int,
+  final: seq<Job>
+)
+
 // ---------- Guard ----------
 method guardEval(
-    i: seq<Job>,
-    o: seq<Job>,
-    J: seq<JobInfo>,
-    Cold: map<Resource,int>,
-    Cnew: map<Resource,int>,
-    deadline: int
+    d_in: RuntimeDataState,
+    d_out: RuntimeDataState 
 ) returns (result: bool)
 
-  requires !initExecutable(i, J, Cnew) //REF: line_executability-pred
-  requires initOptimised(i, J, Cold) //REF: line_optimality-pred
-  requires JobResourcesCovered(J, Cold, Cnew)
+  requires !initExecutable(d_in.init, d_in.J, d_in.C) //REF: line_executability-pred
+  requires initOptimised(d_in.init, d_in.J, d_in.Cold) //REF: line_optimality-pred
+  requires JobResourcesCovered(d_in.J, d_in.Cold, d_in.C)
 
-  ensures result <==> Constraint(o, J, Cnew, deadline) //REF: line_guard-constraints
+  ensures result <==> Constraint(d_out.final, d_in.J, d_in.C, d_in.deadline) //REF: line_guard-constraints
 {
   // Early exit: unchanged schedule
-  if o == i {
+  if d_out.final == d_in.init {
     return false; //REF: line_early-same
   }
 
   // Early exit using optimality argument
-  if !increasedCapacity(Cnew, Cold) && //REF: line_increased-cap
-    makespan(o) < makespan(i) {
-    FasterWithoutIncreaseImpliesInvalid(i, o, J, Cold, Cnew);
+  if !increasedCapacity(d_in.C, d_in.Cold) && //REF: line_increased-cap
+    makespan(d_out.final) < makespan(d_in.init) {
+    FasterWithoutIncreaseImpliesInvalid(d_in.init, d_out.final, d_in.J, d_in.Cold, d_in.C);
     return false; //REF: line_early-opt
   }
 
   // Structural consistency
-  if |J| != |o| {return false;} //REF: line_length-check
+  if |d_in.J| != |d_out.final| {return false;} //REF: line_length-check
 
   // Duration preservation
   var j := 0;
-  while j < |o|
-    invariant 0 <= j <= |o|
+  while j < |d_out.final|
+    invariant 0 <= j <= |d_out.final|
     invariant forall k :: 0 <= k < j ==> //REF: line_preservation
-      o[k].end - o[k].start == J[k].duration 
+      d_out.final[k].end - d_out.final[k].start == d_in.J[k].duration 
   {
-    if o[j].end - o[j].start != J[j].duration {
+    if d_out.final[j].end - d_out.final[j].start != d_in.J[j].duration {
       return false;
     }
     j := j + 1;
@@ -210,17 +215,17 @@ method guardEval(
 
   // Executability
   var j2 := 0;
-  while j2 < |o|
-    invariant 0 <= j2 <= |o|
+  while j2 < |d_out.final|
+    invariant 0 <= j2 <= |d_out.final|
     invariant forall k :: 0 <= k < j2 ==>
-      forall r :: r in J[k].resources ==>
-        resourceUsage(o, k, r) <= Cnew[r]
+      forall r :: r in d_in.J[k].resources ==>
+        resourceUsage(d_out.final, k, r) <= d_in.C[r]
   {
-    var rset := J[j2].resources;
+    var rset := d_in.J[j2].resources;
 
     if exists r ::
          r in rset &&
-         resourceUsage(o, j2, r) > Cnew[r]
+         resourceUsage(d_out.final, j2, r) > d_in.C[r]
     {
       return false; //REF: line_resource
     }
@@ -229,7 +234,7 @@ method guardEval(
   }
 
   // Deadline constraint
-  if makespan(o) > deadline {
+  if makespan(d_out.final) > d_in.deadline {
     return false; //REF: line_deadline
   }
 

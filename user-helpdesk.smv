@@ -1,0 +1,121 @@
+MODULE main
+
+VAR
+  state : {
+    input,
+    risk_check,
+    human_direct,
+    anonymise,
+    ai,
+    guard_eval,
+    unanonymise,
+    send,
+    human_review
+  };
+
+  -- predicates (red labels)
+  highRisk : boolean;
+  inputAnonymised : boolean;
+  noOffensiveTerms : boolean;
+  human_used : boolean;
+  AI_used : boolean;
+
+--------------------------------------------------
+-- INITIAL CONDITIONS
+--------------------------------------------------
+
+ASSIGN
+  init(state) := input;
+
+  init(highRisk) := {TRUE, FALSE};
+  init(inputAnonymised) := FALSE;
+  init(noOffensiveTerms) := TRUE;
+  init(human_used) := FALSE;
+  init(AI_used) := FALSE;
+
+--------------------------------------------------
+-- CONTROL FLOW
+--------------------------------------------------
+
+  next(state) := case
+
+    -- input → risk_check
+    state = input : risk_check;
+
+    -- risk branching
+    state = risk_check & highRisk : human_direct;
+    state = risk_check & !highRisk : anonymise;
+
+    -- anonymisation
+    state = anonymise : ai;
+
+    -- AI processing
+    state = ai : guard_eval;
+
+    -- guard decisions
+    state = guard_eval & noOffensiveTerms : unanonymise;
+    state = guard_eval & !noOffensiveTerms : human_review;
+
+    -- human flows
+    state = human_review : unanonymise;
+    state = human_direct : human_direct;
+
+    -- completion
+    state = unanonymise : send;
+    state = send : send;
+
+    TRUE : state;
+  esac;
+
+--------------------------------------------------
+-- PREDICATES
+--------------------------------------------------
+
+  -- Input anonymisation
+  next(inputAnonymised) := case
+    state = input : FALSE;
+    state = anonymise: TRUE;
+    TRUE : inputAnonymised;
+  esac;
+
+  -- Offensive content check at guard
+  next(noOffensiveTerms) := case
+    state = ai : {TRUE, FALSE};
+    TRUE : noOffensiveTerms;
+  esac;
+
+  -- Human usage flag
+  next(human_used) := case
+    state = human_direct : TRUE;
+    state = human_review : TRUE;
+    TRUE : human_used;
+  esac;
+
+  -- AI usage flag
+  next(AI_used) := case
+    state = ai : TRUE;
+    TRUE : AI_used;
+  esac;
+  
+  next(highRisk) := highRisk;
+
+--------------------------------------------------
+-- Obligations
+--------------------------------------------------
+
+--------------------------------------------------
+-- Obligations
+--------------------------------------------------
+  
+LTLSPEC
+  G (AI_used -> inputAnonymised)
+
+LTLSPEC
+  G (
+    AI_used -> 
+    F (noOffensiveTerms
+    | human_used)
+  )
+
+LTLSPEC
+  G (highRisk -> F human_used)

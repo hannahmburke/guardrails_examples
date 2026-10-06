@@ -1,0 +1,254 @@
+MODULE main
+
+VAR
+  -- control states (refined)
+  state : {
+    s_init,
+    check_exec,
+
+    exec_yes,
+    exec_no,
+
+    keep_init,
+
+    delay,
+    delay_check,
+    delay_exec,
+    delay_nonex,
+
+    deadline_check,
+    deadline_yes,
+    deadline_no,
+
+    keep_delay,
+
+    ai,
+    guard,
+
+    guard_success,
+    guard_fail,
+
+    tries,
+    ai_retry,
+
+    update_ai,
+
+    exhaustive,
+    possible,
+    possible_yes,
+    possible_no,
+
+    update_exh,
+    fail
+  };
+
+  -- attempt counter
+  attempts : 0..10;
+
+  -- predicates
+  initExecutable     : boolean;
+  initFinal          : boolean;
+  finalImplemented   : boolean;
+  durPreserved       : boolean;
+  isExecutable       : boolean;
+  withinDeadline     : boolean;
+  initOptimised        : boolean;
+
+ASSIGN
+
+  -- initial state
+  init(state) := s_init;
+  init(attempts) := 0;
+
+  init(finalImplemented) := FALSE;
+
+  init(initExecutable) := FALSE;
+  init(initFinal) := FALSE;
+  init(durPreserved) := TRUE;
+  init(isExecutable) := {TRUE, FALSE};
+  init(withinDeadline) := TRUE;
+  init(initOptimised) := TRUE;
+
+
+--------------------------------------------------
+-- CONTROL FLOW
+--------------------------------------------------
+
+  next(state) :=
+    case
+      -- start
+      state = s_init : check_exec;
+
+      -- initial executability check
+      state = check_exec & isExecutable : exec_yes;
+      state = check_exec & !isExecutable : exec_no;
+
+      -- executable → keep original
+      state = exec_yes : keep_init;
+
+      -- non-exec path → delay stage
+      state = exec_no : delay;
+      state = delay : delay_check;
+
+      -- delay split
+      state = delay_check & isExecutable : delay_exec;
+      state = delay_check & !isExecutable : delay_nonex;
+
+      state = delay_exec : deadline_check;
+      state = delay_nonex : ai;
+
+      -- deadline check
+      state = deadline_check & withinDeadline : deadline_yes;
+      state = deadline_check & !withinDeadline : deadline_no;
+
+      state = deadline_yes : keep_delay;
+      state = deadline_no : ai;
+
+
+      -- AI loop
+      state = ai : guard;
+
+      -- guard outcome
+      state = guard &
+        durPreserved &
+        isExecutable &
+        withinDeadline : guard_success;
+
+      state = guard &
+        !(durPreserved &
+          isExecutable &
+          withinDeadline) : guard_fail;
+
+      state = guard_success : update_ai;
+      state = guard_fail : tries;
+
+      -- retry loop
+      state = tries & attempts < 10 : ai_retry;
+      state = tries & attempts = 10 : exhaustive;
+
+      state = ai_retry : ai;
+
+      -- exhaustive search
+      state = exhaustive : possible;
+
+      state = possible & isExecutable : possible_yes;
+      state = possible & !isExecutable : possible_no;
+
+      state = possible_yes : update_exh;
+      state = possible_no : fail;
+
+
+      TRUE : state;
+    esac;
+
+--------------------------------------------------
+-- AI attempt counter
+--------------------------------------------------
+
+  next(attempts) :=
+    case
+      state = guard_fail & attempts < 10 : attempts + 1;
+      state = s_init : 0;
+      TRUE : attempts;
+    esac;
+
+--------------------------------------------------
+-- Predicates
+--------------------------------------------------
+
+  next(initExecutable) :=
+    case
+      state = check_exec : isExecutable;
+      TRUE : initExecutable;
+    esac;
+
+
+  next(initFinal) :=
+    case
+      state = keep_init : TRUE;
+      TRUE : initFinal;
+    esac;
+
+
+  next(durPreserved) :=
+    case
+      state = ai         : {TRUE, FALSE};
+      state = exhaustive : TRUE;
+      TRUE : durPreserved;
+    esac;
+
+
+  next(isExecutable) :=
+    case
+      state = delay           : {TRUE, FALSE};
+      state = delay_nonex     : FALSE;
+      state = delay_exec      : TRUE;
+      state = ai              : {TRUE, FALSE};
+      state = exhaustive      : {TRUE, FALSE};
+      state = possible_yes    : TRUE;
+      TRUE : isExecutable;
+    esac;
+
+
+
+  next(withinDeadline) :=
+    case
+      state = delay          : {TRUE, FALSE};
+      state = deadline_yes   : TRUE;
+      state = deadline_no    : FALSE;
+      state = ai             : {TRUE, FALSE};
+      state = exhaustive     : {TRUE, FALSE};
+      state = possible_yes   : TRUE;
+      TRUE : withinDeadline;
+    esac;
+
+
+  next(initOptimised) :=
+    case
+      TRUE : initOptimised;
+    esac;
+
+
+  next(finalImplemented) :=
+    case
+      state = keep_init    : TRUE;
+      state = keep_delay   : TRUE;
+      state = update_ai    : TRUE;
+      state = update_exh   : TRUE;
+      TRUE : FALSE;
+    esac;
+
+
+--------------------------------------------------
+-- Obligations
+--------------------------------------------------
+
+LTLSPEC
+  G (initExecutable -> F initFinal)
+
+LTLSPEC
+  G (
+    finalImplemented ->
+    (
+      durPreserved &
+      isExecutable &
+      withinDeadline
+    )
+  )
+
+--------------------------------------------------
+-- Path check for any states that transition to ai state. We check the negative to see whether the path exists through a counterexample
+--------------------------------------------------
+LTLSPEC
+  G (state!=delay_nonex)
+LTLSPEC
+  G (state!=deadline_no)
+LTLSPEC
+  G (state!=ai_retry)
+    
+--------------------------------------------------
+-- Check input predicates hold at ai state
+--------------------------------------------------
+LTLSPEC
+  G (state=ai -> (initOptimised & !initExecutable))
+  

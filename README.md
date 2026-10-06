@@ -8,23 +8,37 @@ The examples demonstrate how guard correctness and system-level compliance can b
 
 ---
 
-# Example 1: User Helpdesk 
+# Example 1: User Helpdesk
 
 ## Dafny Verification
 
+### Shared Utilities
+
+**File:** `helpdesk-utils.dfy`
+
+Contains reusable string-processing functions, as well as the RuntimeDataState definition
+
 ### Guard Verification
+
 **File:** `offensive_guard.dfy`
 
 Verifies that the guard returns `true` if and only if the AI-generated response contains no offensive words.
 
-### Edge Assertion example
+### Edge Assertion Verification
+
 **File:** `anonymisation_assertion.dfy`
 
-Verifies that the *Anonymise Request* action results in the property:
+Verifies that the *Anonymise Request* action results in the `inputAnonymised` edge assertion:
 
 ```text
 !AI_input.contains(name)
 ```
+and verifies the action preserves the state of the other edge assertions:
+
+- `noOffensiveTerms`
+- `highRisk`
+- `AI_used`
+- `human_used`
 
 
 ---
@@ -110,6 +124,7 @@ The IC3 algorithm is well suited to this example because it can reason about the
 # Repository Structure
 
 ```text
+helpdesk-utils.dfy
 offensive_guard.dfy
 anonymisation_assertion.dfy
 user-helpdesk.smv

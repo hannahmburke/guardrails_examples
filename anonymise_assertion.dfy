@@ -138,17 +138,17 @@ datatype RuntimeDataState = RuntimeDataState(
 // Method representing the anonymisation task
 method AnonymiseRequest(d_q: RuntimeDataState)
   returns (d_q1: RuntimeDataState)
-  ensures !Contains(d_q1.request, d_q.name)
+  ensures !Contains(d_q1.AI_input, d_q1.name)
 {
     // Choose a pseudonym that is different to name
     var pseudonym := if "anonymous" == d_q.name then "pseudonym" else "anonymous";
     var anonRequest := ReplaceAll(d_q.request, d_q.name, pseudonym);
     d_q1 := RuntimeDataState(
       d_q.name,
-      anonRequest,
+      d_q.request,
       d_q.risk,
       d_q.AI_used,
-      d_q.AI_input,
+      anonRequest,
       d_q.human_used,
       d_q.response
     );

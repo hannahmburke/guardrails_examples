@@ -103,6 +103,9 @@ module main{
   method AnonymiseRequest(d_q: RuntimeDataState)
     returns (d_q1: RuntimeDataState)
 
+    // inputAnonymised assertion
+    ensures !Contains(d_q1.AI_input, d_q1.name)
+
     // unchanged edge assertions between d_q and d_q1:
     // AI_used
     ensures d_q1.AI_used == d_q.AI_used 
@@ -113,8 +116,6 @@ module main{
     // noOffensiveTerms
     ensures ((Intersection(offensiveWords,Split(d_q1.response)) == {}) == (Intersection(offensiveWords,Split(d_q.response)) == {} )) 
     
-    // new inputAnonymised assertion
-    ensures !Contains(d_q1.AI_input, d_q1.name)
   {
       // Choose a pseudonym that is different to name
       var pseudonym := if "anonymous" == d_q.name then "pseudonym" else "anonymous";
